@@ -1,0 +1,334 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, shrink-to-fit=no">
+    <title>WebGL Transformations</title>
+    <link rel="stylesheet" href="./css/bootstrap.min.css">
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Lato:400,700,400italic">
+    <link rel="stylesheet" href="./css/styles.min.css">
+    <script id="vertex-shader" type="x-shader/x-vertex">
+        attribute vec4 vPosition;
+        uniform float angle;
+
+        attribute vec4 vColor;
+        varying vec4 fColor;
+
+        uniform mat4 transformationMatrix;
+        uniform mat4 projectionMatrix;
+        uniform mat4 lookatMatrix;
+
+        // lighting
+        varying vec4 aColor;
+        attribute vec4 vNormal;
+
+        // right light
+        uniform vec4 uAmbientProductR, uDiffuseProductR, uSpecularProductR;
+        uniform vec4 uLightPositionR;
+        uniform float uShininessR;
+
+        // left light
+        uniform vec4 uAmbientProduct, uDiffuseProduct, uSpecularProduct;
+        uniform vec4 uLightPosition;
+        uniform float uShininess;
+
+        // moving light
+        uniform vec4 uAmbientProductMoving, uDiffuseProductMoving, uSpecularProductMoving;
+        uniform vec4 uLightPositionMoving;
+        uniform float uShininessMoving;
+        uniform mat4 uMovingLightRotationMatrix;
+
+        // eye light
+        uniform vec4 uAmbientProductEye, uDiffuseProductEye, uSpecularProductEye;
+        uniform float uShininessEye;
+        // cut off for spot light
+        float lCutOff = 0.8;
+
+        void main()
+        {
+            // LEFT
+            vec3 pos = (transformationMatrix * vPosition).xyz;
+
+            //fixed light postion
+            vec3 light = uLightPosition.xyz;
+            vec3 L = normalize(light - pos);
+            vec3 E = -normalize(pos);
+            vec3 H = normalize(L + E);
+            vec3 N = normalize((transformationMatrix * vNormal).xyz);
+
+            // Compute terms in the illumination equation
+            vec4 ambient = uAmbientProduct;
+
+            float Kd = max( dot(L, N), 0.0 );
+            vec4  diffuse = Kd * uDiffuseProduct;
+
+            float Ks = pow( max(dot(N, H), 0.0), uShininess );
+            vec4  specular = Ks * uSpecularProduct;
+
+            if( dot(L, N) < 0.0 ) {
+                specular = vec4(0.0, 0.0, 0.0, 1.0);
+            }
+
+            // RIGHT
+            //fixed light postion
+            vec3 lightR = uLightPositionR.xyz;
+            vec3 LR = normalize(lightR - pos);
+            vec3 ER = -normalize(pos);
+            vec3 HR = normalize(L + E);
+            vec3 NR = normalize((transformationMatrix * vNormal).xyz);
+
+            // Compute terms in the illumination equation
+            vec4 ambientR = uAmbientProductR;
+
+            float KdR = max( dot(LR, NR), 0.0 );
+            vec4  diffuseR = KdR * uDiffuseProductR;
+
+            float KsR = pow( max(dot(NR, HR), 0.0), uShininessR );
+            vec4  specularR = KsR * uSpecularProductR;
+
+            if( dot(LR, NR) < 0.0 ) {
+                specularR = vec4(0.0, 0.0, 0.0, 1.0);
+            }
+
+            // MOVING LIGHT
+            vec3 posMoving = ( uMovingLightRotationMatrix * vPosition).xyz;
+            vec3 lightM = (uLightPositionMoving).xyz;
+            vec3 LM = normalize(lightM - posMoving);
+            vec3 EM = -normalize(posMoving);
+            vec3 HM = normalize(LM + EM);
+            vec3 NM = normalize((transformationMatrix * vNormal).xyz);
+
+            // Compute terms in the illumination equation
+            vec4 ambientM = uAmbientProductMoving;
+
+            float KdM = max( dot(LM, NM), 0.0 );
+            vec4  diffuseM = KdM * uDiffuseProductMoving;
+
+            float KsM = pow( max(dot(NM, HM), 0.0), uShininessMoving );
+            vec4  specularM = KsM * uSpecularProductMoving;
+
+            if( dot(LM, NM) < 0.0 ) {
+                specularM = vec4(0.0, 0.0, 0.0, 1.0);
+            }
+
+            // EYECAMERA
+            // instead of sending the eye camera value from js, I set here and used with lookatMatrix(modelviewMatrix)
+            vec4 eyeCamera = vec4(0.0, 0.0, 1.0, 0.0);
+            vec3 posEye = (lookatMatrix * vPosition).xyz;
+            vec3 lightE = (eyeCamera).xyz;
+            vec3 LE = normalize(lightE - posEye);
+            vec3 EE = -normalize(posEye);
+            vec3 HE = normalize(LE + EE);
+            vec3 NE = normalize((lookatMatrix * transformationMatrix * vNormal).xyz);
+
+            // Compute terms in the illumination equation
+            vec4 ambientE = uAmbientProductEye;
+
+            float KdE = max( dot(LE, NE), 0.0 );
+            vec4  diffuseE = KdE * uDiffuseProductEye;
+
+            float KsE = pow( max(dot(NE, HE), 0.0), uShininessR );
+            vec4  specularE = KsE * uSpecularProductEye;
+
+            if( dot(LE, NE) < 0.0 ) {
+                specularE = vec4(0.0, 0.0, 0.0, 1.0);
+            }
+
+            // calculates the spotligt effect area
+            float lEffect = dot(normalize(NE), normalize(LE+EE));
+
+            vec4 spotAmbient;
+            vec4 spotDiffuse;
+            vec4 spotSpecular;
+
+            // if the spotlight effect area is higher than cutoff value, it shows the light, else it makes other areas darker
+            if(lEffect>lCutOff)
+            {
+                spotAmbient = ambientE;
+                spotDiffuse = diffuseE;
+                spotSpecular = specularE;
+            }
+            else{
+                spotAmbient = vec4(0.0, 0.0, 0.0, 1.0);
+                spotDiffuse = vec4(0.0, 0.0, 0.0, 1.0);
+                spotSpecular = vec4(0.0, 0.0, 0.0, 1.0);
+            }
+
+
+            // transformation and modelview matrix calculation
+            gl_Position =  projectionMatrix * lookatMatrix * transformationMatrix * vPosition;
+
+            // combined light 
+            aColor = ambient + diffuse + specular + ambientR + diffuseR + specularR + ambientM + diffuseM + specularM + spotAmbient + spotDiffuse + spotSpecular;
+            aColor.a = 1.0;
+            fColor =  aColor;
+        }
+    </script>
+
+    <script id="fragment-shader" type="x-shader/x-fragment">
+        precision mediump float;
+
+        varying vec4 fColor;
+
+        void
+        main(){
+            gl_FragColor = fColor;
+        }
+    </script>
+    <script type="text/javascript" src="./Common/initShaders.js"></script>
+    <script type="text/javascript" src="./Common/MV.js"></script>
+    <script type="text/javascript" src="./Common/webgl-utils.js"></script>
+    <script type="text/javascript" src="webglt.js"></script>
+    <style>
+        .slidecontainer {
+            width: 50%;
+        }
+
+        .slider {
+            -webkit-appearance: none;
+            width: 100%;
+            height: 25px;
+            background: #d3d3d3;
+            outline: none;
+            opacity: 0.7;
+            -webkit-transition: .2s;
+            transition: opacity .2s;
+        }
+
+        .slider:hover {
+            opacity: 1;
+        }
+
+        .slider::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 25px;
+            height: 25px;
+            background: #4CAF50;
+            cursor: pointer;
+        }
+
+        .slider::-moz-range-thumb {
+            width: 25px;
+            height: 25px;
+            background: #4CAF50;
+            cursor: pointer;
+        }
+    </style>
+</head>
+
+<body>
+    <!-- Start: Navigation Clean -->
+    <nav class="navbar navbar-light navbar-expand-md navigation-clean">
+        <div class="container"><a class="navbar-brand" href="./webglt.html">
+                <h2>WebGL Transformations</h2>
+            </a>
+            <button data-toggle="collapse" class="navbar-toggler" data-target="#navcol-1"><span class="sr-only">Toggle
+                    navigation</span><span class="navbar-toggler-icon"></span></button>
+            <div class="collapse navbar-collapse" id="navcol-1">
+                <ul class="nav navbar-nav ml-auto">
+
+                </ul>
+            </div>
+        </div>
+    </nav>
+    <!-- End: Navigation Clean -->
+    <!-- Start: Sidebar -->
+    <div class="container">
+        <div class="row">
+            <div class="col-md-8">
+            </div>
+            <div class="col-md-3 ml-5">
+                <b>Projection style : </b> <span id='projectionStyle'> Perspective </span>
+                <hr>
+            </div>
+
+        </div>
+        <div class="row">
+            <div class="col-md-8" id="canvasid" style="height: 500px;">
+                <canvas id="gl-canvas">
+                    Oops ... your browser doesn't support the HTML5 canvas element
+                </canvas>
+                <div class="slidecontainer">
+                    Brightness
+                    <input type="range" min="0" max="100" value="70" step="10" class="slider" id="brightness">
+                </div>
+
+                <hr>
+                <h4>Information</h4>
+                <p><b>Buttons</b></p>
+                <li><b>F</b> : <b>Flat</b> Shading </li>
+                <li><b>M</b> : <b>Smooth</b> Shading</li>
+                <li><b>L</b> : Toggle <b>Left Light</b>. Left light is a red static light. </li>
+                <li><b>R</b> : Toggle <b>Right Light</b>. Right light is a yellow static light. </li>
+                <li><b>G</b> : Toggle <b>Moving Light</b>. Moving light is a white moving light with low specular value.
+                </li>
+                <li><b>H</b> : Toggle <b>Head Mounted Spotlight</b>. Head Mounted Spotlight is a green light which moves
+                    with the camera move.
+                    Camera movements can be found at the right side of the webpage. (W,A,S,D). To observe better, other
+                    lights can be turned off with lower brightness. </li>
+                <hr>
+
+                <p><b>Brightness</b></p>
+                <li>Brightness can be changed via slider. Left side values are <b>darker</b>, right side values are
+                    <b>brighter</b>. </li>
+                <hr>
+
+                <p><b>Different Material Objects</b></p>
+                <li><b>Shiny Cube</b> : Blue cube with a shiny surface. </li>
+                <li><b>Diffused Pyramid</b> : Red pyramid with a diffused surface</li>
+                <li><b>Green Rectangular Prism</b> : Moving back and forth rectangular prism with slightly shiny surface
+                </li>
+                <li><b>Most Shiny OctaHedron</b> : OctaHedron is the most shiny object in the canvas with purple color.
+                </li>
+                <li><b>Custom Shape</b> : Custom shape's color is yellow and it's surface is the least diffused and
+                    specular among others. Therefore,
+                    it reflects light with the smallest amount. </li>
+                <hr>
+
+                <br>
+                <br>
+
+
+            </div>
+            <div class="col-md-3 ml-5">
+                <p><b>Shapes</b></p>
+                There are 5 shapes in this page.
+                <li>1. Cube</li>
+                <li>2. Pyramid</li>
+                <li>3. Rectangular Prism</li>
+                <li>4. OctaHedron</li>
+                <li>5. Custom Shape (sandglass)</li>
+                <hr>
+
+                <p><b>Buttons</b></p>
+                <li>By pressing keys 1-5 you can <b>pause</b> and <b>unpause</b> the translation happening to each of
+                    these shapes
+                    individually.</li>
+                <li>You can control the <b>zoom</b> by pressing <b>W</b> and <b>S</b>.
+                    You rotate the camera around the scene using <b>A</b> and <b>D</b>. By
+                    pressing <b>Q</b> and <b>E</b> you can change the camera gaze.</li>
+                <li>
+                    You can switch between orthographic projection and perspective projection by press <b>O</b> and
+                    <b>P</b>.
+                </li>
+                <hr>
+
+                <p><b>Motions</b></p>
+                <li>Shape 1: The cube is rotating randomly</li>
+                <li>Shape 2: The pyramid is having an unified scaling.</li>
+                <li>Shape 3: The rectangular prism is transforming horizontally from left to right and back.</li>
+                <li>Shape 4: The octahedron is translating among axes.</li>
+                <li>Shape 5: The custom shape (sandglass) is having an non-unified scaling only on x and y axes.</li>
+
+            </div>
+        </div>
+    </div>
+
+    <!-- End: Sidebar -->
+    <script src="./js/jquery.min.js"></script>
+    <script src="./js/bootstrap.min.js"></script>
+</body>
+
+</html>
