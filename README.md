@@ -9,6 +9,8 @@ The goal of this project is;
 * Implement the four different light sources and interact with them
 * Control brightness via range slider
 
+Here is a demo : [WebGL Transformations](https://github.com/yalin/WebGL-Transformations)
+
 More information is below;
 
 * * *
